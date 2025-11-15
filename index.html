@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Carrosserie Pro - Système Peinture v2.0</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+  
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+      color: white;
+      min-height: 100vh;
+      opacity: 0;
+      animation: fadeIn 1s ease-in-out forwards;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.65) 50%, rgba(0,0,0,0.85) 100%);
+      backdrop-filter: blur(2px);
+      z-index: -1;
+    }
+    #app { background: rgba(0,0,0,0.45); min-height: 100vh; padding-bottom: 50px; }
+    .bg-white {
+      background-color: rgba(30,30,35,0.88) !important;
+      backdrop-filter: blur(12px) saturate(120%);
+      border: 1px solid rgba(255,255,255,0.15);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      transition: all 0.4s ease;
+    }
+    .bg-white p, .bg-white span, .bg-white h2, .bg-white h3 { color: #e5e7eb !important; }
+    .text-gray-600, .text-gray-500, .text-gray-700 { color: #d1d5db !important; }
+    .text-blue-600 { color: #60a5fa !important; }
+    input, textarea, select {
+      color: #f3f4f6 !important;
+      background-color: rgba(45,45,50,0.95) !important;
+      border: 2px solid rgba(75,85,99,0.8) !important;
+    }
+    input::placeholder, textarea::placeholder { color: #9ca3af !important; }
+    input:focus, textarea:focus, select:focus {
+      outline: none; box-shadow: 0 0 0 4px rgba(59,130,246,0.3); border-color: #3b82f6 !important;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    .notification {
+      position: fixed; top: 20px; right: 20px; padding: 16px 24px; border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000; animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .modal { 
+      position: fixed; inset: 0; background: rgba(0,0,0,0.8); 
+      display: flex; align-items: center; justify-content: center; 
+      z-index: 2000; padding: 20px; overflow-y: auto;
+    }
+    .modal-content { 
+      background: rgba(30,30,35,0.95); border-radius: 12px; padding: 24px; 
+      max-width: 600px; width: 100%; border: 1px solid rgba(255,255,255,0.15);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .color-swatch {
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      border: 3px solid rgba(255,255,255,0.3);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .color-swatch:hover {
+      transform: scale(1.1);
+      border-color: rgba(255,255,255,0.8);
+    }
+    .loading {
+      display: inline-block; width: 20px; height: 20px; 
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%; border-top-color: #fff; 
+      animation: spin 1s ease-in-out infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .tag {
+      display: inline-block; padding: 4px 8px; border-radius: 4px; 
+      font-size: 11px; font-weight: bold; margin-right: 5px; margin-bottom: 5px;
+    }
+    .tag-urgent { background: #dc2626; color: white; }
+    .tag-warranty { background: #059669; color: white; }
+    .tag-paint { background: #8b5cf6; color: white; }
+    .tag-bodywork { background: #f59e0b; color: white; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="min-h-screen flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
+        <div class="loading mx-auto mb-4"></div>
+        <p class="text-gray-300">Initialisation...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MECHANIC_PIN = "1234";
+    
+    // Base de données couleurs peinture (peut être étendue)
+    const paintDatabase = {
+      "Renault": {
+        "Blanc Glacier": { code: "369", rgb: "#F5F5F5", type: "Opaque" },
+        "Gris Titanium": { code: "KNA", rgb: "#6B7280", type: "Métallisé" },
+        "Noir Étoilé": { code: "676", rgb: "#1F2937", type: "Nacré" },
+        "Rouge Flamme": { code: "NNP", rgb: "#DC2626", type: "Métallisé" },
+        "Bleu Iron": { code: "RNF", rgb: "#1E40AF", type: "Métallisé" }
+      },
+      "Peugeot": {
+        "Blanc Banquise": { code: "KTH", rgb: "#FAFAFA", type: "Opaque" },
+        "Gris Artense": { code: "M0WG", rgb: "#4B5563", type: "Métallisé" },
+        "Noir Perla Nera": { code: "M0WH", rgb: "#111827", type: "Métallisé" },
+        "Bleu Vertigo": { code: "M0TH", rgb: "#3B82F6", type: "Nacré" }
+      },
+      "Citroën": {
+        "Blanc Banquise": { code: "KTH", rgb: "#FFFFFF", type: "Opaque" },
+        "Gris Shark": { code: "KMF", rgb: "#6B7280", type: "Métallisé" },
+        "Noir Perla Nera": { code: "EXL", rgb: "#0F172A", type: "Métallisé" }
+      },
+      "Volkswagen": {
+        "Blanc Pur": { code: "B4B4", rgb: "#FAFAFA", type: "Opaque" },
+        "Gris Indium": { code: "X3M", rgb: "#52525B", type: "Métallisé" },
+        "Noir Intense": { code: "LC9Z", rgb: "#18181B", type: "Nacré" },
+        "Bleu Ravenna": { code: "2T2T", rgb: "#1E3A8A", type: "Métallisé" }
+      },
+      "BMW": {
+        "Blanc Alpin": { code: "300", rgb: "#FFFFFF", type: "Opaque" },
+        "Gris Mineral": { code: "A83", rgb: "#71717A", type: "Métallisé" },
+        "Noir Saphir": { code: "475", rgb: "#09090B", type: "Métallisé" },
+        "Bleu Portimao": { code: "C2S", rgb: "#1E40AF", type: "Métallisé" }
+      },
+      "Mercedes": {
+        "Blanc Polaire": { code: "149", rgb: "#FAFAFA", type: "Opaque" },
+        "Gris Sélénite": { code: "775", rgb: "#78716C", type: "Métallisé" },
+        "Noir Obsidienne": { code: "197", rgb: "#0C0A09", type: "Métallisé" },
+        "Bleu Spectral": { code: "359", rgb: "#2563EB", type: "Nacré" }
+      }
+    };
+
+    const garageInfo = {
+      name: "Carrosserie Professionnelle",
+      address: "123 Route Nationale, 75000 Paris",
+      phone: "01 23 45 67 89",
+      email: "contact@carrosserie-pro.fr",
+      vatNumber: "FR12345678901",
+      website: "www.carrosserie-pro.fr"
+    };
+
+    let vehicles = {};
+    let currentVehicle = null;
+    let showAddForm = false;
+    let isMechanicMode = false;
+    let isClientMode = false;
+    let showLoginScreen = true;
+    let searchQuery = '';
+    let showShareModal = false;
+    let shareModalTarga = null;
+    let showPaintModal = false;
+    let selectedBrand = '';
+    let selectedColor = null;
+
+    function showNotification(message, type = 'success') {
+      const notification = document.createElement('div');
+      notification.className = `notification ${type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white`;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+      setTimeout(() => { 
+        notification.style.animation = 'slideIn 0.3s ease-out reverse'; 
+        setTimeout(() => notification.remove(), 300); 
+      }, 3000);
+    }
+
+    function loadDataLocal() {
+      try {
+        const stored = localStorage.getItem('carrosserie_vehicles');
+        if (stored) vehicles = JSON.parse(stored);
+      } catch (error) { vehicles = {}; }
+    }
+
+    function saveDataLocal() {
+      try { 
+        localStorage.setItem('carrosserie_vehicles', JSON.stringify(vehicles)); 
+      } catch (error) {}
+    }
+
+    function generateClientCode(targa) { 
+      return `${targa}-${new Date().getFullYear()}`; 
+    }
+
+    function verifyClientCode(code) {
+      const parts = code.toUpperCase().split('-');
+      if (parts.length < 2) return null;
+      const year = parts[parts.length - 1];
+      const targa = parts.slice(0, -1).join('-');
+      const currentYear = new Date().getFullYear().toString();
+      const lastYear = (new Date().getFullYear() - 1).toString();
+      if ((year === currentYear || year === lastYear) && vehicles[targa]) return targa;
+      return null;
+    }
+
+    function getClientLink(targa) {
+      const code = vehicles[targa].clientCode || generateClientCode(targa);
+      return `${window.location.origin}${window.location.pathname}?code=${encodeURIComponent(code)}`;
+    }
+
+    function login() {
+      const code = document.getElementById('loginCode').value.trim();
+      if (!code) return showNotification("❌ Code invalide", 'error');
+      
+      if (code === MECHANIC_PIN) {
+        isMechanicMode = true;
+        isClientMode = false;
+        showLoginScreen = false;
+        currentVehicle = null;
+        showNotification("✅ Accès mécanicien");
+        render();
+        return;
+      }
+      
+      const targa = verifyClientCode(code);
+      if (targa && vehicles[targa]) {
+        isClientMode = true;
+        isMechanicMode = false;
+        showLoginScreen = false;
+        currentVehicle = targa;
+        showNotification(`✅ Bienvenue - ${targa}`);
+        render();
+        return;
+      }
+      
+      showNotification("❌ Code invalide", 'error');
+    }
+
+    function logout() {
+      if (confirm("Êtes-vous sûr de vouloir vous déconnecter?")) {
+        isMechanicMode = false;
+        isClientMode = false;
+        showLoginScreen = true;
+        currentVehicle = null;
+        showAddForm = false;
+        searchQuery = '';
+        showNotification("👋 Déconnecté");
+        render();
+      }
+    }
+
+    function addVehicle() {
+      if (!isMechanicMode) return showNotification("❌ Accès refusé", 'error');
+      
+      const targa = document.getElementById('newVehicleTarga').value.toUpperCase().trim();
+      const marca = document.getElementById('newVehicleMarca').value.trim();
+      const modello = document.getElementById('newVehicleModello').value.trim();
+      const clienteNome = document.getElementById('clienteNome').value.trim();
+      const clienteTelefono = document.getElementById('clienteTelefono').value.trim();
+      const clienteEmail = document.getElementById('clienteEmail').value.trim();
+      
+      if (!targa || !marca || !clienteNome) {
+        return showNotification("❌ Champs obligatoires manquants", 'error');
+      }
+      if (vehicles[targa]) {
+        return showNotification("❌ Véhicule déjà existant", 'error');
+      }
+      
+      vehicles[targa] = {
+        targa,
+        marca,
+        modello,
+        anno: document.getElementById('newVehicleAnno').value.trim(),
+        cliente: { nome: clienteNome, telefono: clienteTelefono, email: clienteEmail },
+        interventi: [],
+        paintWork: [],
+        clientCode: generateClientCode(targa),
+        createdAt: new Date().toISOString()
+      };
+      
+      saveDataLocal();
+      document.getElementById('newVehicleTarga').value = '';
+      document.getElementById('newVehicleMarca').value = '';
+      document.getElementById('newVehicleModello').value = '';
+      document.getElementById('newVehicleAnno').value = '';
+      document.getElementById('clienteNome').value = '';
+      document.getElementById('clienteTelefono').value = '';
+      document.getElementById('clienteEmail').value = '';
+      
+      showNotification("✅ Véhicule ajouté avec succès");
+      setTimeout(() => render(), 100);
+    }
+
+    function openPaintModal() {
+      showPaintModal = true;
+      selectedBrand = '';
+      selectedColor = null;
+      render();
+    }
+
+    function selectPaintBrand(brand) {
+      selectedBrand = brand;
+      render();
+    }
+
+    function selectPaintColor(colorName, colorData) {
+      selectedColor = { name: colorName, ...colorData };
+      render();
+    }
+
+    function addPaintWork() {
+      if (!selectedColor) return showNotification("❌ Sélectionnez une couleur", 'error');
+      
+      const description = document.getElementById('paintDescription').value.trim();
+      const surface = document.getElementById('paintSurface').value.trim();
+      const cost = document.getElementById('paintCost').value;
+      
+      if (!description || !surface) {
+        return showNotification("❌ Description et surface requises", 'error');
+      }
+      
+      const paintWork = {
+        id: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        brand: selectedBrand,
+        colorName: selectedColor.name,
+        colorCode: selectedColor.code,
+        colorRgb: selectedColor.rgb,
+        colorType: selectedColor.type,
+        description,
+        surface,
+        cost: parseFloat(cost) || 0,
+        timestamp: new Date().toISOString()
+      };
+      
+      if (!vehicles[currentVehicle].paintWork) {
+        vehicles[currentVehicle].paintWork = [];
+      }
+      vehicles[currentVehicle].paintWork.unshift(paintWork);
+      
+      saveDataLocal();
+      showPaintModal = false;
+      selectedColor = null;
+      showNotification("✅ Travaux de peinture ajoutés");
+      render();
+    }
+
+    function addIntervention() {
+      if (!isMechanicMode) return showNotification("❌ Accès refusé", 'error');
+      
+      const data = document.getElementById('interventoData').value;
+      const tipo = document.getElementById('interventoTipo').value;
+      const descrizione = document.getElementById('interventoDesc').value.trim();
+      const costo = document.getElementById('interventoCosto').value;
+      const meccanico = document.getElementById('interventoMeccanico').value.trim();
+      const note = document.getElementById('interventoNote').value.trim();
+      
+      if (!tipo || !descrizione) {
+        return showNotification("❌ Type et description requis", 'error');
+      }
+      
+      const intervento = {
+        id: Date.now(),
+        data,
+        tipo,
+        descrizione,
+        costo,
+        meccanico,
+        note,
+        timestamp: new Date().toISOString()
+      };
+      
+      vehicles[currentVehicle].interventi.unshift(intervento);
+      saveDataLocal();
+      showAddForm = false;
+      showNotification("✅ Intervention enregistrée");
+      render();
+    }
+
+    function deleteIntervention(id) {
+      if (!isMechanicMode) return showNotification("❌ Accès refusé", 'error');
+      if (!confirm("Supprimer cette intervention?")) return;
+      
+      vehicles[currentVehicle].interventi = vehicles[currentVehicle].interventi.filter(i => i.id !== id);
+      saveDataLocal();
+      render();
+    }
+
+    function deletePaintWork(id) {
+      if (!isMechanicMode) return showNotification("❌ Accès refusé", 'error');
+      if (!confirm("Supprimer ces travaux de peinture?")) return;
+      
+      vehicles[currentVehicle].paintWork = vehicles[currentVehicle].paintWork.filter(p => p.id !== id);
+      saveDataLocal();
+      render();
+    }
+
+    function deleteVehicle(targa) {
+      if (!isMechanicMode) return showNotification("❌ Accès refusé", 'error');
+      if (!confirm(`Supprimer définitivement le véhicule ${targa}?`)) return;
+      
+      delete vehicles[targa];
+      saveDataLocal();
+      render();
+    }
+
+    function openShareModal(targa) {
+      showShareModal = true;
+      shareModalTarga = targa;
+      render();
+      setTimeout(() => {
+        const link = getClientLink(targa);
+        const qrElement = document.getElementById('qrcode');
+        if (qrElement && typeof QRCode !== 'undefined') {
+          qrElement.innerHTML = '';
+          new QRCode(qrElement, { text: link, width: 200, height: 200 });
+        }
+      }, 100);
+    }
+
+    function copyLink(targa) {
+      const link = getClientLink(targa);
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(link).then(() => 
+          showNotification("🔗 Lien copié")
+        );
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = link;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showNotification("🔗 Lien copié");
+      }
+    }
+
+    function shareViaWhatsApp(targa) {
+      const v = vehicles[targa];
+      const link = getClientLink(targa);
+      const msg = `Bonjour! Voici le lien pour consulter l'historique de votre véhicule ${targa} (${v.marca} ${v.modello}):\n\n${link}\n\nCarrosserie Professionnelle`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    function shareViaEmail(targa) {
+      const v = vehicles[targa];
+      const link = getClientLink(targa);
+      const subject = `Historique Véhicule ${targa}`;
+      const body = `Cher Client,\n\nVoici le lien pour consulter l'historique complet de votre véhicule ${targa} (${v.marca} ${v.modello}):\n\n${link}\n\nCordialement,\nCarrosserie Professionnelle`;
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    }
+
+    function updateSearch(q) { 
+      searchQuery = q.toLowerCase(); 
+      render(); 
+    }
+
+    function getFilteredVehicles() {
+      if (!searchQuery) return Object.values(vehicles);
+      return Object.values(vehicles).filter(v =>
+        v.targa.toLowerCase().includes(searchQuery) ||
+        (v.marca && v.marca.toLowerCase().includes(searchQuery)) ||
+        (v.modello && v.modello.toLowerCase().includes(searchQuery)) ||
+        (v.cliente?.nome && v.cliente.nome.toLowerCase().includes(searchQuery))
+      );
+    }
+
+    function generatePDF() {
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const vehicle = vehicles[currentVehicle];
+        
+        // En-tête
+        doc.setFillColor(37, 99, 235);
+        doc.rect(0, 0, 210, 40, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(20);
+        doc.text(garageInfo.name, 20, 25);
+        
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(10);
+        doc.text(garageInfo.address, 20, 50);
+        doc.text(`Tél: ${garageInfo.phone}`, 20, 56);
+        doc.text(`Email: ${garageInfo.email}`, 20, 62);
+        
+        doc.setFontSize(16);
+        doc.setTextColor(37, 99, 235);
+        doc.text("Rapport Complet Carrosserie", 20, 80);
+        
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(12);
+        doc.text(`Véhicule: ${vehicle.targa}`, 20, 95);
+        doc.text(`${vehicle.marca} ${vehicle.modello} ${vehicle.anno || ''}`, 20, 102);
+        if (vehicle.cliente?.nome) {
+          doc.text(`Client: ${vehicle.cliente.nome}`, 20, 109);
+        }
+        
+        let startY = 120;
+        
+        // Travaux peinture
+        if (vehicle.paintWork?.length > 0) {
+          doc.setFontSize(14);
+          doc.setFont(undefined, 'bold');
+          doc.text("🎨 Travaux de Peinture", 20, startY);
+          
+          const paintHeaders = [['Date', 'Marque', 'Couleur', 'Code', 'Type', 'Surface', 'Coût (€)']];
+          const paintBody = vehicle.paintWork.map(p => [
+            p.date,
+            p.brand,
+            p.colorName,
+            p.colorCode,
+            p.colorType,
+            p.surface,
+            p.cost.toFixed(2)
+          ]);
+          
+          doc.autoTable({
+            head: paintHeaders,
+            body: paintBody,
+            startY: startY + 5,
+            theme: 'grid',
+            headStyles: { fillColor: [139, 92, 246], textColor: 255 }
+          });
+          
+          startY = doc.previousAutoTable.finalY + 15;
+        }
+        
+        // Interventions
+        if (vehicle.interventi?.length > 0) {
+          doc.setFontSize(14);
+          doc.setFont(undefined, 'bold');
+          doc.text("🔧 Interventions", 20, startY);
+          
+          const intHeaders = [['Date', 'Type', 'Description', 'Coût (€)']];
+          const intBody = vehicle.interventi.map(i => [
+            i.data,
+            i.tipo,
+            i.descrizione.substring(0, 40),
+            i.costo || '0.00'
+          ]);
+          
+          doc.autoTable({
+            head: intHeaders,
+            body: intBody,
+            startY: startY + 5,
+            theme: 'grid',
+            headStyles: { fillColor: [37, 99, 235], textColor: 255 }
+          });
+        }
+        
+        const fileName = `${vehicle.targa}_rapport_${new Date().toISOString().split('T')[0]}.pdf`;
+        doc.save(fileName);
+        showNotification("📄 PDF généré avec succès");
+      } catch (error) {
+        console.error('PDF Error:', error);
+        showNotification("❌ Erreur génération PDF", 'error');
+      }
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      
+      // Modal Peinture
+      if (showPaintModal) {
+        const vehicle = vehicles[currentVehicle];
+        app.innerHTML = `
+          <div class="modal" onclick="if(event.target.classList.contains('modal')) { showPaintModal=false; render(); }">
+            <div class="modal-content" onclick="event.stopPropagation()">
+              <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-white">🎨 Ajouter Peinture</h2>
+                <button onclick="showPaintModal=false; render();" class="text-white hover:text-red-400 text-4xl font-bold leading-none px-3">×</button>
+              </div>
+              
+              ${!selectedBrand ? `
+                <h3 class="text-lg font-semibold mb-3 text-gray-300">Sélectionnez la marque du véhicule:</h3>
+                <div class="grid grid-cols-2 gap-3">
+                  ${Object.keys(paintDatabase).map(brand => `
+                    <button onclick="selectPaintBrand('${brand}')" 
+                      class="bg-blue-600 hover:bg-blue-700 text-white py-4 px-3 rounded-lg font-semibold text-sm">
+                      ${brand}
+                    </button>
+                  `).join('')}
+                </div>
+              ` : !selectedColor ? `
+                <button onclick="selectedBrand=''; render();" class="mb-4 text-blue-400 hover:text-blue-300">← Retour aux marques</button>
+                <h3 class="text-lg font-semibold mb-3 text-gray-300">Couleurs disponibles pour ${selectedBrand}:</h3>
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                  ${Object.entries(paintDatabase[selectedBrand]).map(([colorName, colorData]) => `
+                    <div onclick="selectPaintColor('${colorName}', ${JSON.stringify(colorData).replace(/"/g, '&quot;')})" 
+                      class="flex items-center gap-3 p-3 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700 transition-all">
+                      <div class="color-swatch" style="background-color: ${colorData.rgb};"></div>
+                      <div class="flex-1">
+                        <p class="font-bold text-white">${colorName}</p>
+                        <p class="text-sm text-gray-400">Code: ${colorData.code} • ${colorData.type}</p>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : `
+                <button onclick="selectedColor=null; render();" class="mb-4 text-blue-400 hover:text-blue-300">← Retour aux couleurs</button>
+                <div class="bg-gray-800 p-4 rounded-lg mb-4">
+                  <div class="flex items-center gap-3 mb-3">
+                    <div class="color-swatch" style="background-color: ${selectedColor.rgb};"></div>
+                    <div>
+                      <p class="font-bold text-white text-lg">${selectedColor.name}</p>
+                      <p class="text-sm text-gray-400">Code: ${selectedColor.code} • ${selectedColor.type}</p>
+                      <p class="text-xs text-gray-500">Marque: ${selectedBrand}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">📝 Description des travaux *</label>
+                    <textarea id="paintDescription" rows="3" placeholder="Ex: Peinture capot avant, portière droite..." 
+                      class="w-full px-3 py-2 border rounded"></textarea>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">📐 Surface traitée *</label>
+                    <input type="text" id="paintSurface" placeholder="Ex: 2 éléments, capot complet..." 
+                      class="w-full px-3 py-2 border rounded">
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">💰 Coût (€)</label>
+                    <input type="number" id="paintCost" step="0.01" placeholder="0.00" 
+                      class="w-full px-3 py-2 border rounded">
+                  </div>
+                  
+                  <button onclick="addPaintWork()" 
+                    class="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-lg font-semibold">
+                    ✅ Enregistrer Peinture
+                  </button>
+                </div>
+              `}
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Modal Partage
+      if (showShareModal && shareModalTarga) {
+        const vehicle = vehicles[shareModalTarga];
+        const code = vehicle.clientCode || generateClientCode(shareModalTarga);
+        const link = getClientLink(shareModalTarga);
+        app.innerHTML = `
+          <div class="modal" onclick="if(event.target.classList.contains('modal')) { showShareModal=false; render(); }">
+            <div class="modal-content" onclick="event.stopPropagation()">
+              <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-white">🔗 Partager l'Accès Client</h2>
+                <button onclick="showShareModal=false; shareModalTarga=null; render();" 
+                  class="text-white hover:text-red-400 text-4xl font-bold leading-none px-3">×</button>
+              </div>
+              
+              <div class="text-center mb-4">
+                <p class="text-gray-300 mb-2">Véhicule: <strong class="text-white">${shareModalTarga}</strong></p>
+                <p class="text-gray-400">${vehicle.marca || ''} ${vehicle.modello || ''}</p>
+                ${vehicle.cliente?.nome ? `
+                  <div class="bg-gray-800 p-2 rounded mt-2">
+                    <p class="text-sm text-blue-400 font-semibold">👤 ${vehicle.cliente.nome}</p>
+                    ${vehicle.cliente.telefono ? `<p class="text-xs text-gray-500">📞 ${vehicle.cliente.telefono}</p>` : ''}
+                    ${vehicle.cliente.email ? `<p class="text-xs text-gray-500">✉️ ${vehicle.cliente.email}</p>` : ''}
+                  </div>
+                ` : ''}
+              </div>
+              
+              <div id="qrcode" style="display: flex; justify-content: center; padding: 20px; background: white; border-radius: 8px; margin: 16px 0;"></div>
+              
+              <div class="bg-gray-800 p-3 rounded mb-4">
+                <p class="text-xs text-gray-400 mb-1">Lien direct:</p>
+                <p class="text-sm text-blue-400 break-all">${link}</p>
+              </div>
+              
+              <div class="bg-gray-800 p-3 rounded mb-4">
+                <p class="text-xs text-gray-400 mb-1">Code manuel:</p>
+                <p class="text-lg text-white font-bold text-center">${code}</p>
+              </div>
+              
+              <div class="space-y-2">
+                <button onclick="copyLink('${shareModalTarga}')" 
+                  class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">
+                  📋 Copier le Lien
+                </button>
+                <button onclick="shareViaWhatsApp('${shareModalTarga}')" 
+                  class="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700">
+                  📱 Envoyer via WhatsApp
+                </button>
+                <button onclick="shareViaEmail('${shareModalTarga}')" 
+                  class="w-full bg-gray-600 text-white py-3 rounded-lg font-semibold hover:bg-gray-700">
+                  📧 Envoyer via Email
+                </button>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Écran de connexion
+      if (showLoginScreen) {
+        app.innerHTML = `
+          <div class="min-h-screen flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+              <div class="text-center mb-8">
+                <div class="text-6xl mb-4">🎨</div>
+                <h1 class="text-3xl font-bold mb-2">Carrosserie Pro</h1>
+                <p class="text-gray-400">Système Gestion Peinture v2.0</p>
+              </div>
+              
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-semibold mb-2 text-gray-300">Entrez le code:</label>
+                  <input type="text" id="loginCode" placeholder="Code Mécanicien ou Client" 
+                    class="w-full px-4 py-3 border-2 rounded-lg text-center text-xl font-bold uppercase" 
+                    onkeypress="if(event.key==='Enter') login()" autofocus>
+                </div>
+                
+                <button onclick="login()" 
+                  class="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold hover:bg-blue-700">
+                  🔐 Connexion
+                </button>
+                
+                <div class="mt-6 pt-6 border-t border-gray-700">
+                  <p class="text-xs text-gray-500 text-center">
+                    🔧 <strong>Mécanicien:</strong> Utilisez le PIN<br>
+                    👤 <strong>Client:</strong> Utilisez le code reçu<br>
+                    🎨 <strong>Spécialisé:</strong> Références couleurs peinture
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Liste des véhicules (mode mécanicien)
+      if (!currentVehicle && isMechanicMode) {
+        const vehiclesList = getFilteredVehicles();
+        app.innerHTML = `
+          <div class="min-h-screen">
+            <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 shadow-lg">
+              <div class="flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <div class="text-4xl">🎨</div>
+                  <div>
+                    <h1 class="text-2xl font-bold">Carrosserie Pro</h1>
+                    <p class="text-xs text-blue-100">🔧 Mode Mécanicien</p>
+                  </div>
+                </div>
+                <button onclick="logout()" class="px-4 py-2 bg-red-500 rounded hover:bg-red-600">
+                  Déconnexion
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-4">
+              <!-- Formulaire nouveau véhicule -->
+              <div class="bg-white rounded-lg shadow p-4 mb-4">
+                <h2 class="text-lg font-bold mb-3 text-white">➕ Nouveau Véhicule</h2>
+                <div class="space-y-3">
+                  <input type="text" id="newVehicleTarga" placeholder="Plaque d'immatriculation *" 
+                    class="w-full px-3 py-2 border rounded uppercase font-bold">
+                  
+                  <div class="grid grid-cols-2 gap-2">
+                    <input type="text" id="newVehicleMarca" placeholder="Marque *" 
+                      class="px-3 py-2 border rounded">
+                    <input type="text" id="newVehicleModello" placeholder="Modèle" 
+                      class="px-3 py-2 border rounded">
+                  </div>
+                  
+                  <input type="number" id="newVehicleAnno" placeholder="Année" 
+                    class="w-full px-3 py-2 border rounded">
+                  
+                  <div class="border-t border-gray-600 pt-3">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-2">👤 Informations Client</h3>
+                    <input type="text" id="clienteNome" placeholder="Nom du client *" 
+                      class="w-full px-3 py-2 border rounded mb-2">
+                    <input type="tel" id="clienteTelefono" placeholder="Téléphone" 
+                      class="w-full px-3 py-2 border rounded mb-2">
+                    <input type="email" id="clienteEmail" placeholder="Email" 
+                      class="w-full px-3 py-2 border rounded">
+                  </div>
+                  
+                  <button onclick="addVehicle()" 
+                    class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">
+                    ✅ Ajouter Véhicule
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Barre de recherche -->
+              ${Object.keys(vehicles).length > 3 ? `
+                <div class="mb-4">
+                  <input type="text" placeholder="🔍 Rechercher un véhicule..." 
+                    class="w-full px-4 py-3 border-2 rounded-lg" 
+                    oninput="updateSearch(this.value)" value="${searchQuery}">
+                </div>
+              ` : ''}
+              
+              <!-- Liste véhicules -->
+              <h2 class="text-xl font-bold mb-3 text-white">🚗 Véhicules (${vehiclesList.length})</h2>
+              
+              ${vehiclesList.length === 0 ? `
+                <div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
+                  <p>${searchQuery ? 'Aucun véhicule trouvé' : 'Aucun véhicule enregistré'}</p>
+                </div>
+              ` : `
+                <div class="space-y-3">
+                  ${vehiclesList.map(v => {
+                    const paintCount = v.paintWork?.length || 0;
+                    const intCount = v.interventi?.length || 0;
+                    const totalCost = [...(v.paintWork || []), ...(v.interventi || [])]
+                      .reduce((sum, item) => sum + (parseFloat(item.costo || item.cost) || 0), 0);
+                    
+                    return `
+                      <div class="bg-white rounded-lg shadow p-4">
+                        <div class="flex justify-between items-center">
+                          <div class="flex-1 cursor-pointer" onclick="currentVehicle='${v.targa}'; render();">
+                            <span class="text-xl font-bold text-white">${v.targa}</span>
+                            <p class="text-gray-400">${v.marca || ''} ${v.modello || ''} ${v.anno ? `(${v.anno})` : ''}</p>
+                            ${v.cliente?.nome ? `
+                              <p class="text-sm font-semibold text-blue-400 mt-1">👤 ${v.cliente.nome}</p>
+                            ` : ''}
+                            ${v.cliente?.telefono ? `
+                              <p class="text-xs text-gray-500">📞 ${v.cliente.telefono}</p>
+                            ` : ''}
+                            <div class="flex gap-3 mt-2 text-xs">
+                              <span class="text-purple-400">🎨 ${paintCount} peinture${paintCount > 1 ? 's' : ''}</span>
+                              <span class="text-blue-400">🔧 ${intCount} intervention${intCount > 1 ? 's' : ''}</span>
+                              <span class="text-green-400">💰 €${totalCost.toFixed(2)}</span>
+                            </div>
+                          </div>
+                          
+                          <div class="flex gap-2">
+                            <button onclick="event.stopPropagation(); openShareModal('${v.targa}')" 
+                              class="bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 font-semibold">
+                              🔗
+                            </button>
+                            <button onclick="event.stopPropagation(); deleteVehicle('${v.targa}')" 
+                              class="text-red-500 hover:bg-red-50 px-3 py-2 rounded text-sm font-bold">
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              `}
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Détails d'un véhicule
+      const vehicle = vehicles[currentVehicle];
+      if (!vehicle) {
+        app.innerHTML = `
+          <div class="min-h-screen flex items-center justify-center">
+            <div class="bg-white rounded-lg shadow p-8 text-center">
+              <p class="text-gray-400 mb-4">Véhicule non trouvé</p>
+              <button onclick="logout()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                Retour à la connexion
+              </button>
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Formulaire nouvelle intervention
+      if (showAddForm) {
+        const today = new Date().toISOString().split('T')[0];
+        app.innerHTML = `
+          <div class="min-h-screen">
+            <div class="bg-blue-600 text-white p-4 shadow-lg">
+              <div class="flex items-center gap-3">
+                <div class="text-3xl">🔧</div>
+                <div>
+                  <h1 class="text-xl font-bold">${vehicle.targa}</h1>
+                  <p class="text-blue-100">➕ Nouvelle Intervention</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="p-4">
+              <div class="bg-white rounded-lg shadow p-4">
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">📅 Date *</label>
+                    <input type="date" id="interventoData" value="${today}" 
+                      class="w-full px-3 py-2 border rounded">
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">🔧 Type *</label>
+                    <select id="interventoTipo" class="w-full px-3 py-2 border rounded">
+                      <option value="">Sélectionner...</option>
+                      <option value="Débosselage">Débosselage</option>
+                      <option value="Carrosserie">Réparation Carrosserie</option>
+                      <option value="Pare-choc">Pare-choc</option>
+                      <option value="Capot">Capot</option>
+                      <option value="Portière">Portière</option>
+                      <option value="Aile">Aile</option>
+                      <option value="Autre">Autre</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">📝 Description *</label>
+                    <textarea id="interventoDesc" rows="3" 
+                      placeholder="Détails de l'intervention..." 
+                      class="w-full px-3 py-2 border rounded"></textarea>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">💰 Coût (€)</label>
+                    <input type="number" id="interventoCosto" step="0.01" placeholder="0.00" 
+                      class="w-full px-3 py-2 border rounded">
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">👤 Technicien</label>
+                    <input type="text" id="interventoMeccanico" placeholder="Nom du technicien" 
+                      class="w-full px-3 py-2 border rounded">
+                  </div>
+                  
+                  <div>
+                    <label class="block text-sm font-semibold mb-1 text-gray-300">💬 Notes</label>
+                    <textarea id="interventoNote" rows="3" 
+                      placeholder="Observations, recommandations..." 
+                      class="w-full px-3 py-2 border rounded"></textarea>
+                  </div>
+                  
+                  <div class="flex gap-2 pt-2">
+                    <button onclick="addIntervention()" 
+                      class="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700">
+                      ✅ Enregistrer
+                    </button>
+                    <button onclick="showAddForm=false; render();" 
+                      class="flex-1 bg-gray-600 text-white py-3 rounded-lg font-semibold hover:bg-gray-700">
+                      ✕ Annuler
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Vue détaillée du véhicule
+      const paintWork = vehicle.paintWork || [];
+      const interventions = vehicle.interventi || [];
+      const totalCost = [...paintWork, ...interventions]
+        .reduce((sum, item) => sum + (parseFloat(item.costo || item.cost) || 0), 0);
+      
+      app.innerHTML = `
+        <div class="min-h-screen">
+          <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 shadow-lg">
+            <div class="flex justify-between items-center mb-2">
+              ${isMechanicMode ? `
+                <button onclick="currentVehicle=null; render();" 
+                  class="hover:bg-blue-700 px-3 py-2 rounded">
+                  ← Retour
+                </button>
+              ` : '<div></div>'}
+              <button onclick="logout()" class="px-3 py-2 bg-red-500 rounded hover:bg-red-600 text-sm">
+                Déconnexion
+              </button>
+            </div>
+            
+            <div class="flex items-center gap-3">
+              <div class="text-4xl">🎨</div>
+              <div>
+                <h1 class="text-2xl font-bold">${vehicle.targa}</h1>
+                <p class="text-blue-100">${vehicle.marca || ''} ${vehicle.modello || ''} ${vehicle.anno ? `(${vehicle.anno})` : ''}</p>
+                ${vehicle.cliente?.nome ? `
+                  <p class="text-sm text-blue-100 mt-1">👤 ${vehicle.cliente.nome}</p>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+          
+          <div class="p-4">
+            ${isMechanicMode ? `
+              <div class="grid grid-cols-4 gap-2 mb-4">
+                <button onclick="openPaintModal()" 
+                  class="bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700">
+                  🎨 Peinture
+                </button>
+                <button onclick="showAddForm=true; render();" 
+                  class="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700">
+                  🔧 Intervention
+                </button>
+                <button onclick="openShareModal('${currentVehicle}')" 
+                  class="bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700">
+                  🔗 Partage
+                </button>
+                <button onclick="generatePDF()" 
+                  class="bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700">
+                  📄 PDF
+                </button>
+              </div>
+            ` : `
+              <div class="bg-blue-900 bg-opacity-50 text-white p-4 rounded-lg mb-4 text-center border border-blue-500">
+                <p class="text-sm font-semibold">👤 Mode Client - Lecture seule</p>
+              </div>
+            `}
+            
+            <!-- Statistiques -->
+            <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="bg-white rounded-lg shadow p-3 text-center">
+                <div class="text-2xl font-bold text-purple-400">${paintWork.length}</div>
+                <div class="text-xs text-gray-400">🎨 Peintures</div>
+              </div>
+              <div class="bg-white rounded-lg shadow p-3 text-center">
+                <div class="text-2xl font-bold text-blue-400">${interventions.length}</div>
+                <div class="text-xs text-gray-400">🔧 Interventions</div>
+              </div>
+              <div class="bg-white rounded-lg shadow p-3 text-center">
+                <div class="text-2xl font-bold text-green-400">€${totalCost.toFixed(2)}</div>
+                <div class="text-xs text-gray-400">💰 Total</div>
+              </div>
+            </div>
+            
+            <!-- Travaux de peinture -->
+            <h2 class="text-xl font-bold mb-3 text-white">🎨 Travaux de Peinture (${paintWork.length})</h2>
+            ${paintWork.length === 0 ? `
+              <div class="bg-white rounded-lg shadow p-8 text-center text-gray-400 mb-4">
+                <p>Aucun travail de peinture enregistré</p>
+              </div>
+            ` : `
+              <div class="space-y-3 mb-4">
+                ${paintWork.map(paint => `
+                  <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-start mb-3">
+                      <div class="flex-1">
+                        <div class="text-sm text-gray-400 mb-1">📅 ${paint.date}</div>
+                        <h3 class="font-bold text-lg text-purple-400">${paint.colorName}</h3>
+                      </div>
+                      ${isMechanicMode ? `
+                        <button onclick="deletePaintWork(${paint.id})" 
+                          class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-sm font-bold">
+                          ✕
+                        </button>
+                      ` : ''}
+                    </div>
+                    
+                    <div class="flex items-center gap-3 mb-3">
+                      <div class="color-swatch" style="background-color: ${paint.colorRgb};"></div>
+                      <div class="flex-1">
+                        <p class="text-sm font-semibold text-gray-300">
+                          Code: ${paint.colorCode} • ${paint.colorType}
+                        </p>
+                        <p class="text-xs text-gray-500">Marque: ${paint.brand}</p>
+                      </div>
+                    </div>
+                    
+                    <p class="text-gray-300 mb-2">${paint.description}</p>
+                    
+                    <div class="flex flex-wrap gap-3 text-sm">
+                      <div class="text-gray-400">📐 ${paint.surface}</div>
+                      ${paint.cost ? `<div class="text-green-400 font-semibold">💰 €${paint.cost.toFixed(2)}</div>` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+            
+            <!-- Interventions carrosserie -->
+            <h2 class="text-xl font-bold mb-3 text-white">🔧 Interventions Carrosserie (${interventions.length})</h2>
+            ${interventions.length === 0 ? `
+              <div class="bg-white rounded-lg shadow p-8 text-center text-gray-400">
+                <p>Aucune intervention enregistrée</p>
+              </div>
+            ` : `
+              <div class="space-y-3">
+                ${interventions.map(inter => `
+                  <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-start mb-2">
+                      <div class="flex-1">
+                        <div class="text-sm text-gray-400 mb-1">📅 ${inter.data || 'Date'}</div>
+                        <h3 class="font-bold text-lg text-blue-400">${inter.tipo}</h3>
+                      </div>
+                      ${isMechanicMode ? `
+                        <button onclick="deleteIntervention(${inter.id})" 
+                          class="text-red-500 hover:bg-red-50 px-2 py-1 rounded text-sm font-bold">
+                          ✕
+                        </button>
+                      ` : ''}
+                    </div>
+                    
+                    <p class="text-gray-300 mb-2">${inter.descrizione}</p>
+                    
+                    ${inter.note ? `
+                      <div class="bg-yellow-900 bg-opacity-30 border-l-4 border-yellow-500 p-3 mt-2 rounded">
+                        <p class="text-sm text-gray-300">
+                          <span class="font-semibold">💬 Notes:</span> ${inter.note}
+                        </p>
+                      </div>
+                    ` : ''}
+                    
+                    <div class="flex flex-wrap gap-3 mt-2 text-sm">
+                      ${inter.costo ? `
+                        <div class="text-green-400 font-semibold">💰 €${inter.costo}</div>
+                      ` : ''}
+                      ${inter.meccanico ? `
+                        <div class="text-gray-400">👤 ${inter.meccanico}</div>
+                      ` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+        </div>`;
+    }
+
+    function init() {
+      loadDataLocal();
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      
+      if (code) {
+        const targa = verifyClientCode(code);
+        if (targa) {
+          isClientMode = true;
+          isMechanicMode = false;
+          showLoginScreen = false;
+          currentVehicle = targa;
+          window.history.replaceState({}, document.title, window.location.pathname);
+          showNotification(`✅ Accès automatique - ${targa}`);
+        }
+      }
+      
+      render();
+    }
+
+    init();
+  </script>
+</body>
+</html>
